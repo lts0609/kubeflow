@@ -26,4 +26,5 @@ exec /opt/conda/bin/jupyter lab \
   --ServerApp.allow_origin="*" \
   --ServerApp.allow_remote_access=True \
   --ServerApp.authenticate_prometheus=False \
-  --ServerApp.base_url="${NB_PREFIX}"
+  --ServerApp.base_url="${NB_PREFIX}" \
+  --IdentityProvider.hashed_password="${NB_HASHED_PASSWD}"

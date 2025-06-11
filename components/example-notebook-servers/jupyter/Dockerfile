@@ -19,15 +19,26 @@ ARG NODE_MAJOR_VERSION=20
 ARG PIP_VERSION=24.3.1
 ARG PYTHON_VERSION=3.11.11
 
-# install -- node.js
+# install -- node.js and openssh-server
 RUN export DEBIAN_FRONTEND=noninteractive \
  && curl -sL "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" | apt-key add - \
  && echo "deb https://deb.nodesource.com/node_${NODE_MAJOR_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
  && apt-get -yq update \
  && apt-get -yq install --no-install-recommends \
+    sudo \
     nodejs \
+    openssh-server \
  && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && ssh-keygen -A \
+ && chown -R ${NB_USER}:${NB_GID} /etc/ssh
+
+# Configure SSHD
+RUN mkdir -p /var/run/sshd \
+ && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+ && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config \
+ && echo "${NB_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${NB_USER} \
+ && chmod 0440 /etc/sudoers.d/${NB_USER}
 
 # setup environment for conda
 ENV CONDA_DIR /opt/conda
@@ -50,14 +61,13 @@ RUN mkdir -pv /usr/local/etc/jupyter \
 USER $NB_UID
 
 # install - conda, pip, python, jupyter
+COPY --chown=${NB_USER}:${NB_GID} --chmod=755 Miniforge3/ /tmp
 RUN case "${TARGETARCH}" in \
       amd64) MINIFORGE_ARCH="x86_64" ;; \
       arm64) MINIFORGE_ARCH="aarch64" ;; \
       ppc64le) MINIFORGE_ARCH="ppc64le" ;; \
       *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
     esac \
- && curl -fsSL "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-${MINIFORGE_ARCH}.sh" -o /tmp/Miniforge3.sh \
- && curl -fsSL "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-${MINIFORGE_ARCH}.sh.sha256" -o /tmp/Miniforge3.sh.sha256 \
  && echo "$(cat /tmp/Miniforge3.sh.sha256 | awk '{ print $1; }')  /tmp/Miniforge3.sh" | sha256sum -c - \
  && rm /tmp/Miniforge3.sh.sha256 \
  && /bin/bash /tmp/Miniforge3.sh -b -f -p ${CONDA_DIR} \
@@ -101,4 +111,4 @@ RUN cp -p -r -T "${HOME}" "${HOME_TMP}" \
     # give group same access as user (needed for OpenShift)
  && chmod -R g=u "${HOME_TMP}"
 
-EXPOSE 8888
+EXPOSE 22 8888
